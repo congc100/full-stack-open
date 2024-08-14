@@ -1,35 +1,8 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const Filter = ({ filter, setFilter }) => {
-  return (
-    <div>
-      filter shown with: <input value={filter} onChange={e => setFilter(e.target.value)} />
-    </div>
-  )
-}
-
-const PersonForm = ({ onSubmit, newName, setNewName, newNumber, setNewNumber }) => {
-  return (
-    <form onSubmit={onSubmit}>
-      <div>
-        name: <input value={newName} onChange={e => setNewName(e.target.value)} />
-      </div>
-      <div>
-        number: <input value={newNumber} onChange={e => setNewNumber(e.target.value)} />
-      </div>
-      <div>
-        <button type="submit">add</button>
-      </div>
-    </form>
-  )
-}
-
-const Persons = ({ persons, filter }) => {
-  return persons
-    .filter(p => new RegExp(filter, 'i').test(p.name))
-    .map(p => <div key={p.name}>{p.name} {p.number}</div>)
-}
+import personService from './services/persons'
+import Filter from './components/Filter'
+import PersonForm from './components/PersonForm'
+import Persons from './components/Persons'
 
 const App = () => {
   const [persons, setPersons] = useState([])
@@ -39,20 +12,46 @@ const App = () => {
   const [newNumber, setNewNumber] = useState('')
 
   useEffect(() => {
-    axios
-      .get('http://localhost:3001/persons')
+    personService
+      .getAll()
       .then(response => setPersons(response.data))
   }, [])
 
   const onSubmit = e => {
     e.preventDefault()
-    if (persons.filter(p => p.name === newName).length !== 0) {
-      alert(`${newName} is already added to the phonebook`)
+    const sameName = persons.filter(p => p.name === newName)
+    if (sameName.length !== 0) {
+      const current = sameName[0]
+      if (!window.confirm(`${current.name} is already added to phonebook, replace the old number with a new one?`)) {
+        return
+      }
+      personService
+        .update(current.id, { ...current, number: newNumber })
+        .then(response => {
+          console.log('update res', response)
+          setPersons(persons.map(p => p.id === response.data.id ? response.data : p))
+          setNewName('')
+          setNewNumber('')
+        })
     } else {
-      setPersons([...persons, { name: newName, number: newNumber }])
-      setNewName('')
-      setNewNumber('')
+      personService
+        .create({ name: newName, number: newNumber })
+        .then(response => {
+          console.log('submit res', response)
+          setPersons([...persons, response.data])
+          setNewName('')
+          setNewNumber('')
+        })
     }
+  }
+
+  const onDelete = id => {
+    personService
+      .remove(id)
+      .then(response => {
+        console.log('remove res', response)
+        setPersons(persons.filter(p => p.id !== id))
+      })
   }
 
   return (
@@ -68,7 +67,7 @@ const App = () => {
         setNewNumber={setNewNumber}
       />
       <h3>Numbers</h3>
-      <Persons persons={persons} filter={filter} />
+      <Persons persons={persons} filter={filter} onDelete={onDelete} />
     </div>
   )
 }
